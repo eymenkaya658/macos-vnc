@@ -24,8 +24,9 @@ jobs:
           ADMIN_USER=$(whoami)
           echo "Kullanıcı Adı: $ADMIN_USER"
           
-          # macOS uyumlu dscl komutu ile şifreyi (Password@123!) güvenli bir şekilde değiştiriyoruz
-          sudo dscl . -passwd /Users/$ADMIN_USER "$NEW_PASSWORD"
+          # Eski şifreyi sormadan doğrudan şifreyi Password@123! yapan macOS aracı
+          sudo sysadminctl -deletePassword $ADMIN_USER
+          sudo sysadminctl -resetPasswordFor $ADMIN_USER -newPassword "$NEW_PASSWORD"
           echo "Admin şifresi başarıyla güncellendi!"
 
           # Ekran Paylaşımı (VNC) ve Uzaktan Yönetimi Aktif Et
