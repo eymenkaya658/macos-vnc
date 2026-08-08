@@ -15,7 +15,7 @@ jobs:
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTH_KEY }}
-          args: --hostname=github-runner-mac26 --advertise-tags=tag:ci
+          args: --hostname=github-runner-mac26
 
       - name: Admin Şifresini Değiştir ve VNC'yi Etkinleştir
         env:
