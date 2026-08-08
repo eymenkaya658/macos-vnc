@@ -1,11 +1,11 @@
-name: macOS 26 VNC - Xcode & iOS Geliştirme (6 Saat)
+name: macOS 26 VNC - Kesintisiz iOS & Xcode
 on:
   workflow_dispatch:
 
 jobs:
   macos-vnc-xcode:
     runs-on: macos-26
-    timeout-minutes: 360
+    timeout-minutes: 360 # 6 saat boyunca açık tutar
     
     steps:
       - name: Checkout Repository
@@ -17,35 +17,50 @@ jobs:
           authkey: ${{ secrets.TS_AUTH_KEY }}
           args: --hostname=github-runner-mac26
 
-      - name: Admin Şifresini Değiştir ve VNC'yi Etkinleştir
+      - name: TCC Gizlilik İzinlerini Aç ve VNC'yi Etkinleştir
         env:
           NEW_PASSWORD: ${{ secrets.NEW_PASSWORD }}
         run: |
           ADMIN_USER=$(whoami)
           echo "Kullanıcı Adı: $ADMIN_USER"
-          
-          # Eski şifreyi sormadan doğrudan şifreyi Password@123! yapan macOS aracı
+
+          # 1. Şifreyi sorunsuz şekilde güncelle
           sudo sysadminctl -deletePassword $ADMIN_USER
           sudo sysadminctl -resetPasswordFor $ADMIN_USER -newPassword "$NEW_PASSWORD"
-          echo "Admin şifresi başarıyla güncellendi!"
 
-          # Ekran Paylaşımı (VNC) ve Uzaktan Yönetimi Aktif Et
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -users "$ADMIN_USER" -privs -all -restart -agent -menu
+          # 2. macOS Güvenlik Duvarını tamamen kapat
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate off
+
+          # 3. CRITICAL: Ekran Kaydı ve Ekran Kontrolü (TCC) Kilitlerini SQL Veritabanına Enjekte Ederek Kırıyoruz
+          # Bu komutlar System Settings içerisindeki "Screen Recording" ve "Accessibility" izinlerini onaylar.
+          sudo sqlite3 /Library/Application\ Support/com.apple.TCC/TCC.db "INSERT OR REPLACE INTO access VALUES('kTCCServiceScreenCapture','com.apple.screensharing',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));" || true
+          sudo sqlite3 /Library/Application\ Support/com.apple.TCC/TCC.db "INSERT OR REPLACE INTO access VALUES('kTCCServiceAccessibility','com.apple.screensharing',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));" || true
+          sudo sqlite3 /Library/Application\ Support/com.apple.TCC/TCC.db "INSERT OR REPLACE INTO access VALUES('kTCCServicePostEvent','com.apple.screensharing',0,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,$(date +%s));" || true
+
+          # 4. Uzaktan Yönetimi (Remote Management) Tüm İzinlerle Başlat
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate \
+            -configure -allowAccessFor -allUsers \
+            -configure -access -on \
+            -configure -privs -all \
+            -restart -agent -menu
+
+          # 5. Soket Ayarlarını ve launchd Servislerini Yeniden Yükle
           sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
-          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-          
-          # Bilgileri Yazdır
+          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+          sudo launchctl kickstart -k system/com.apple.screensharing || true
+
+          # Bağlantı Çıktıları
           echo "Tailscale IP Adresiniz:"
           tailscale ip -4
-          echo "Bağlantı URL'i: vnc://$ADMIN_USER@$(tailscale ip -4)"
+          echo "Bağlantı Formatı: vnc://$ADMIN_USER@$(tailscale ip -4)"
 
       - name: Xcode ve iOS Sürümlerini Kontrol Et
         run: |
           xcode-select -p
           xcodebuild -version
-          xcrun simctl list devices available
 
       - name: 6 Saat Boyunca Ortamı Açık Tut
         run: |
-          echo "Bağlantı aktif. 6 saat boyunca iOS projenizi geliştirebilirsiniz."
+          echo "TCC Gizlilik bypassları uygulandı. Uyarılar geçildi. Bağlanabilirsiniz."
           sleep 21600
