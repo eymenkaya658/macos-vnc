@@ -1,0 +1,57 @@
+name: macOS 26 VNC - Xcode & iOS Geliştirme
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-vnc-xcode:
+    runs-on: macos-26  # Apple Silicon ARM64 mimarisi üzerinde en son macOS sürümü
+    timeout-minutes: 360  # Maksimum 6 saat sınırını ayarlar
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Tailscale'e Bağlan
+        uses: tailscale/github-action@v3
+        with:
+          auth-key: ${{ secrets.TS_AUTH_KEY }}
+          args: --hostname=github-runner-mac26 --advertise-tags=tag:ci
+
+      - name: Admin Şifresini Değiştir ve VNC'yi Etkinleştir
+        env:
+          NEW_PASSWORD: ${{ secrets.NEW_PASSWORD }}
+        run: |
+          ADMIN_USER=$(whoami)
+          echo "Kullanıcı Adı: $ADMIN_USER"
+          
+          # Admin şifresini güncelle
+          echo "$ADMIN_USER:$NEW_PASSWORD" | sudo chpasswd
+          echo "Admin şifresi başarıyla güncellendi!"
+
+          # Ekran Paylaşımı (VNC) ve Uzaktan Yönetimi Aktif Et
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -users "$ADMIN_USER" -privs -all -restart -agent -menu
+          sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing -dict Disabled -bool false
+          sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+          
+          # Pencere yöneticisini VNC için hazırla (GUI/Simülatör hatalarını önler)
+          sudo auditget || true
+          
+          # Bilgileri Yazdır
+          echo "Tailscale IP Adresiniz:"
+          tailscale ip -4
+          echo "Bağlantı URL'i: vnc://$ADMIN_USER@$(tailscale ip -4)"
+
+      - name: Xcode ve iOS Araçlarını Hazırla
+        run: |
+          # Aktif Xcode sürümünü kontrol et ve doğrula
+          xcode-select -p
+          xcodebuild -version
+          
+          # Kullanılabilir iOS Simülatör listesini ve SDK'ları listele
+          xcrun simctl list devices available
+          xcodebuild -showsdks
+
+      - name: 6 Saat Boyunca VNC ve Geliştirme Ortamını Açık Tut
+        run: |
+          echo "Bağlantı hazır. 6 saat boyunca iOS projenizi geliştirebilir, Xcode çalıştırabilir ve simülatör kullanabilirsiniz."
+          sleep 21600
